@@ -1,4 +1,3 @@
-
 # dotnet-audio-app
 
 This repository contains a build to create Desktop audio apps to interface with other OS apps in .NET. Cross-platform .NET Application with Avalonia, ONNX, and NAudio. It will add the AI Runtime in the future. This repository focuses on developing with open libraries and models. Tested on Windows 11.
