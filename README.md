@@ -1,29 +1,73 @@
 # dotnet-audio-app
 
-This repository contains a build to create Desktop audio apps to interface with other OS apps in .NET. Cross-platform .NET Application with Avalonia, ONNX, and NAudio. It will add the AI Runtime in the future. This repository focuses on developing with open libraries and models. Tested on Windows 11.
+This repository contains a cross-platform .NET desktop audio application that interfaces with system audio on Windows, Linux, and macOS. Built with Avalonia UI, NAudio, and ONNX Runtime for AI capabilities. This repository focuses on developing with open libraries and models. Tested on Windows 11, Ubuntu 22.04, and macOS.
 
-![.NET Audio Controller Interface](.\media\20250911.png)
+![.NET Audio Controller Interface](./media/20250911.png)
 
-### Setup on Windows 11 Laptop:
-.NET 8 SDK (LTS)
+### Setup Instructions:
 
+#### Prerequisites
+- .NET 8 SDK (LTS) - [Download here](https://dotnet.microsoft.com/download)
+
+#### Windows Setup:
 ```powershell
-# On powershell
+# Install .NET 8 SDK
 winget install --id Microsoft.DotNet.SDK.8 -e
 dotnet -v
 
-# For clean build (if you have issues)  
-# cd to current folder .\dotnet-audio-app\  
+# Clone and navigate to project
+git clone https://github.com/vecnode/dotnet-audio-app.git
+cd dotnet-audio-app
 
+# Build and run
 dotnet clean src/App/App.csproj  
 dotnet build src/App/App.csproj  
 dotnet run --project src/App/App.csproj  
 
-# Or use your custom script  
+# Or use the PowerShell script
 .\start.ps1 
 
-# For Release Windows
+# For Release build (Windows)
 dotnet publish src/App/App.csproj -c Release -r win-x64 --self-contained true   
+```
+
+#### Linux Setup:
+```bash
+# Install .NET 8 SDK (Ubuntu/Debian)
+wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
+sudo dpkg -i packages-microsoft-prod.deb
+sudo apt-get update
+sudo apt-get install -y dotnet-sdk-8.0
+
+# Clone and navigate to project
+git clone https://github.com/vecnode/dotnet-audio-app.git
+cd dotnet-audio-app
+
+# Build and run
+dotnet clean src/App/App.csproj
+dotnet build src/App/App.csproj
+dotnet run --project src/App/App.csproj
+
+# For Release build (Linux)
+dotnet publish src/App/App.csproj -c Release -r linux-x64 --self-contained true
+```
+
+#### macOS Setup:
+```bash
+# Install .NET 8 SDK
+brew install --cask dotnet-sdk
+
+# Clone and navigate to project
+git clone https://github.com/vecnode/dotnet-audio-app.git
+cd dotnet-audio-app
+
+# Build and run
+dotnet clean src/App/App.csproj
+dotnet build src/App/App.csproj
+dotnet run --project src/App/App.csproj
+
+# For Release build (macOS)
+dotnet publish src/App/App.csproj -c Release -r osx-x64 --self-contained true
 ```  
 
 ### Features
