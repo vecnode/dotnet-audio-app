@@ -1,8 +1,8 @@
 # dotnet-audio-app
 
-This repository contains a template for a .NET desktop audio application built with Avalonia UI, NAudio, and ONNX Runtime (for AI capabilities, future). This repository focuses on developing with open libraries and models. Tested on Windows 11.
+This repository contains a template for a .NET desktop audio application built with Avalonia UI, NAudio, and ONNX Runtime (for AI capabilities, future). Focus on developing with open libraries and models. Tested on Windows 11.
 
-![.NET Audio Controller Interface](./media/20250911.png)
+![.NET Audio Controller Interface](./media/20250914.png)
 
 ### Setup Instructions:
 
@@ -31,44 +31,6 @@ dotnet run --project src/App/App.csproj
 dotnet publish src/App/App.csproj -c Release -r win-x64 --self-contained true   
 ```
 
-#### Linux Setup:
-```bash
-# Install .NET 8 SDK (Ubuntu/Debian)
-wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
-sudo dpkg -i packages-microsoft-prod.deb
-sudo apt-get update
-sudo apt-get install -y dotnet-sdk-8.0
-
-# Clone and navigate to project
-git clone https://github.com/vecnode/dotnet-audio-app.git
-cd dotnet-audio-app
-
-# Build and run
-dotnet clean src/App/App.csproj
-dotnet build src/App/App.csproj
-dotnet run --project src/App/App.csproj
-
-# For Release build (Linux)
-dotnet publish src/App/App.csproj -c Release -r linux-x64 --self-contained true
-```
-
-#### macOS Setup:
-```bash
-# Install .NET 8 SDK
-brew install --cask dotnet-sdk
-
-# Clone and navigate to project
-git clone https://github.com/vecnode/dotnet-audio-app.git
-cd dotnet-audio-app
-
-# Build and run
-dotnet clean src/App/App.csproj
-dotnet build src/App/App.csproj
-dotnet run --project src/App/App.csproj
-
-# For Release build (macOS)
-dotnet publish src/App/App.csproj -c Release -r osx-x64 --self-contained true
-```  
 
 ### Features
 
@@ -80,20 +42,14 @@ dotnet publish src/App/App.csproj -c Release -r osx-x64 --self-contained true
 ### Design Guidelines
 
 - This repository should be developed as cross-platform as possible.
-- For best cross-platform behavior, the script should start with CPU ONNX Runtime. 
+- (future) For best cross-platform behavior, the script should start with CPU ONNX Runtime. 
 - On Windows, we will enable GPU via DirectML in the future (no CUDA install needed):
-- `start.ps1` starts `run.ps1` and that should be enough for Windows/Linux development.
-- `setup_env.ps1` is to setup the repository from version control a first time and fix `.\cache\` and `.\cache\packages\`
-
-Uncomment the DirectML block in run.ps1, or run once:  
-  
-```
-dotnet add src/App/App.csproj package Microsoft.ML.OnnxRuntime.DirectML
-```    
+- `start.ps1` should be enough for Windows development.
+- `updaye.ps1` is to setup the repository folder on Windows.
 
 ### Next steps
 
-- Manually ask for permissions
+- Manually ask for permissions (UI)
 - Time clock
 - Develop a modular build to include ONNX (or not)
 - Develop a Docker image and test on WSL2

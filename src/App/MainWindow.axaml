@@ -37,6 +37,7 @@
                        FontSize="12" 
                        Foreground="White" 
                        Margin="0,5,0,2"/>
+                       
             <ComboBox Name="InputDeviceComboBox"
                       Background="#3C3C3C"
                       Foreground="White"
@@ -51,22 +52,27 @@
                        Text="OS: Detecting" 
                        Foreground="White" 
                        Margin="0,2"/>
+
             <TextBlock Name="DotNetVersionText"
                        Text=".NET: Detecting"
                        Foreground="White"
                        Margin="0,2"/>
+
             <TextBlock Name="Is64BitOSText"
                        Text="64-bit OS: Detecting"
                        Foreground="White"
                        Margin="0,2"/>
+
             <TextBlock Name="Is64BitProcessText"
                        Text="64-bit Process: Detecting"
                        Foreground="White"
                        Margin="0,2"/>
+
             <TextBlock Name="RuntimeIdentifierText"
                        Text="Runtime ID: Detecting"
                        Foreground="White"
                        Margin="0,2"/>
+
             <TextBlock Name="ProcessorCountText"
                        Text="Processors: Detecting"
                        Foreground="White"
@@ -76,24 +82,22 @@
                        Text="Working Set: Detecting"
                        Foreground="White"
                        Margin="0,2"/>
+            
             <TextBlock Name="TotalMemoryText"
                        Text="Total Memory: Detecting"
                        Foreground="White"
                        Margin="0,2"/>
-            <TextBlock Name="MachineNameText"
-                       Text="Machine: Detecting"
-                       Foreground="White"
-                       Margin="0,2"/>
             
-
             <TextBlock Name="MemoryText"
                        Text="Memory: Detecting" 
                        Foreground="White" 
                        Margin="0,2"/>
+
             <TextBlock Name="GpuAccelerationText"
                        Text="GPU Acceleration: Detecting" 
                        Foreground="White" 
                        Margin="0,2"/>
+            
             <TextBlock Name="AudioBackendText"
                        Text="Audio Backend: Detecting"
                        Foreground="White"

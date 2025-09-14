@@ -5,6 +5,7 @@ using System.Linq;
 
 using Avalonia.Controls;
 using Avalonia.Threading;
+using NAudio.Wave;
 
 
 namespace App;
@@ -16,7 +17,7 @@ public class DeviceDisplayItem {
     
     public DeviceDisplayItem(NAudioDeviceInfo device) {
         Device = device;
-        DisplayName = device.Name;
+        DisplayName = device.GetDisplayName();
     }
     
     public override string ToString() {
@@ -27,7 +28,8 @@ public class DeviceDisplayItem {
 public partial class MainWindow : Window {
     private DispatcherTimer? _performanceTimer;
     private NAudioEngine? _audioEngine;
-    private object? _playbackDevice;
+    private DirectSoundOut? _playbackDevice;
+    private WaveInEvent? _inputDevice;
     
 
     // Constructor
@@ -44,10 +46,8 @@ public partial class MainWindow : Window {
     
     protected override void OnClosed(EventArgs e) {
         try {
-            if (_playbackDevice is IDisposable disposableDevice)
-            {
-                disposableDevice.Dispose();
-            }
+            _playbackDevice?.Dispose();
+            _inputDevice?.Dispose();
             _audioEngine?.Dispose();
             
         }
@@ -71,8 +71,11 @@ public partial class MainWindow : Window {
             _audioEngine.UpdateDevicesInfo();
 
             var format = AudioFormat.Dvd; // 48kHz, 16-bit Stereo
-            var defaultDevice = _audioEngine.PlaybackDevices.FirstOrDefault(x => x.IsDefault);
-            _playbackDevice = _audioEngine.InitializePlaybackDevice(defaultDevice, format);
+            var defaultPlaybackDevice = _audioEngine.PlaybackDevices.FirstOrDefault(x => x.IsDefault);
+            var defaultInputDevice = _audioEngine.CaptureDevices.FirstOrDefault(x => x.IsDefault);
+            
+            _playbackDevice = _audioEngine.InitializePlaybackDevice(defaultPlaybackDevice, format);
+            _inputDevice = _audioEngine.InitializeInputDevice(defaultInputDevice, format);
             
             // Populate device combo boxes
             PopulateDeviceComboBoxes();
@@ -104,7 +107,6 @@ public partial class MainWindow : Window {
             UpdateTextBlock("ProcessorCountText", $"Processors: {systemInfo.ProcessorCount}");
             UpdateTextBlock("WorkingSetText", $"Working Set: {systemInfo.WorkingSet / (1024 * 1024):N0} MB");
             UpdateTextBlock("TotalMemoryText", $"Total Memory: {systemInfo.TotalMemory / (1024 * 1024):N0} MB");
-            UpdateTextBlock("MachineNameText", $"Machine: {systemInfo.MachineName}");
         }
         catch (Exception ex) {
             _ = ex; // Suppress warning
@@ -137,8 +139,8 @@ public partial class MainWindow : Window {
         }
     }
     
-    private void UpdatePerformanceInfo()
-    {
+    
+    private void UpdatePerformanceInfo() {
         try {
             var perfInfo = SystemUtilities.GetCurrentPerformanceInfo();            
             var audioBackend = perfInfo.AudioBackend;
@@ -199,9 +201,7 @@ public partial class MainWindow : Window {
             var comboBox = sender as ComboBox;
             if (comboBox?.SelectedItem is DeviceDisplayItem selectedItem) {
                 // Dispose current device
-                if (_playbackDevice is IDisposable disposableDevice) {
-                    disposableDevice.Dispose();
-                }
+                _playbackDevice?.Dispose();
 
                 // Initialize new device
                 var format = AudioFormat.Dvd;
@@ -219,8 +219,12 @@ public partial class MainWindow : Window {
 
             var comboBox = sender as ComboBox;
             if (comboBox?.SelectedItem is DeviceDisplayItem selectedItem) {
-                // Note: Input device switching would require additional implementation
-                // For now, we just handle the selection
+                // Dispose current input device
+                _inputDevice?.Dispose();
+
+                // Initialize new input device
+                var format = AudioFormat.Dvd;
+                _inputDevice = _audioEngine.InitializeInputDevice(selectedItem.Device, format);
             }
         }
         catch (Exception ex) {

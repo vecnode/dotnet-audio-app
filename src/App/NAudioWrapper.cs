@@ -7,22 +7,31 @@ using NAudio.CoreAudioApi;
 
 namespace App;
 
-// NAudio wrapper classes to match SoundFlow interface
 public class NAudioDeviceInfo {
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public bool IsDefault { get; set; }
+    public bool IsAvailable { get; set; } = true;
+    public string Status { get; set; } = "Available";
     
-    public NAudioDeviceInfo(string id, string name, bool isDefault) {
+    public NAudioDeviceInfo(string id, string name, bool isDefault, bool isAvailable = true, string status = "Available") {
         Id = id;
         Name = name;
         IsDefault = isDefault;
+        IsAvailable = isAvailable;
+        Status = status;
+    }
+    
+    public string GetDisplayName() {
+        var defaultSuffix = IsDefault ? " (Default)" : "";
+        return $"{Name}{defaultSuffix}";
     }
 }
 
 public class NAudioEngine : IDisposable {
     public List<NAudioDeviceInfo> PlaybackDevices { get; private set; } = new();
     public List<NAudioDeviceInfo> CaptureDevices { get; private set; } = new();
+    private WaveInEvent? _currentInputDevice;
     
     public NAudioEngine() {
         UpdateDevicesInfo();
@@ -30,17 +39,22 @@ public class NAudioEngine : IDisposable {
     
     public void UpdateDevicesInfo() {
         try {
-            // Cross-platform device enumeration
             PlaybackDevices.Clear();
             CaptureDevices.Clear();
             
             // Platform-specific device enumeration
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
-                EnumerateWindowsDevices();
-            } else {
-                // For non-Windows platforms, NOT TESTED
-                PlaybackDevices.Add(new NAudioDeviceInfo("0", "Default Output Device", true));
-                CaptureDevices.Add(new NAudioDeviceInfo("0", "Default Input Device", true));
+            if (IsWindows11OrLater()) {
+                // Use DirectSoundOut for device enumeration on Windows 11+
+                EnumeratePlaybackDevices();
+                EnumerateCaptureDevices();
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
+                // Fallback for older Windows versions
+                EnumerateWindowsFallbackDevices();
+            }
+            else {
+                // Non-Windows platforms - use basic enumeration
+                EnumerateCrossPlatformDevices();
             }
             
         }
@@ -56,95 +70,251 @@ public class NAudioEngine : IDisposable {
         }
     }
     
-    private void EnumerateWindowsDevices() {
+    private bool IsWindows11OrLater() {
         try {
-            // Windows: Use Core Audio API to enumerate real devices
-            using (var deviceEnumerator = new MMDeviceEnumerator()) {
-                // Get default devices
-                var defaultPlayback = deviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Console);
-                var defaultCapture = deviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console);
-                
-                
-                // Add default devices first
-                PlaybackDevices.Add(new NAudioDeviceInfo(defaultPlayback.ID, defaultPlayback.FriendlyName, true));
-                CaptureDevices.Add(new NAudioDeviceInfo(defaultCapture.ID, defaultCapture.FriendlyName, true));
-                
-                // Try to enumerate additional devices using a different approach
-                try {
-                    // Use the device collection directly
-                    var deviceCollection = deviceEnumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
-                    foreach (MMDevice device in deviceCollection) {
-                        // Skip if already added as default
-                        if (device.ID != defaultPlayback.ID) {
-                            PlaybackDevices.Add(new NAudioDeviceInfo(device.ID, device.FriendlyName, false));
-                        }
-                    }
-                }
-                catch (Exception ex) {
-                    _ = ex; // Suppress warning
-                }
-                
-                try {
-                    // Use the device collection directly
-                    var deviceCollection = deviceEnumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
-                    foreach (MMDevice device in deviceCollection) {
-                        // Skip if already added as default
-                        if (device.ID != defaultCapture.ID) {
-                            CaptureDevices.Add(new NAudioDeviceInfo(device.ID, device.FriendlyName, false));
-                        }
-                    }
-                }
-                catch (Exception ex) {
-                    _ = ex; // Suppress warning
-                }
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
+                return false;
             }
             
-            
+            // Check Windows version - Windows 11 is version 10.0.22000+
+            var osVersion = Environment.OSVersion.Version;
+            return osVersion.Major >= 10 && osVersion.Build >= 22000;
         }
         catch (Exception ex) {
             _ = ex; // Suppress warning
-            // Fallback to DirectSound enumeration
-            EnumerateWindowsDevicesFallback();
+            return false;
         }
     }
     
-    private void EnumerateWindowsDevicesFallback() {
+    private void EnumerateWindowsFallbackDevices() {
         try {
-            // Fallback: Use DirectSoundOut for more detailed device info
-            foreach (var device in DirectSoundOut.Devices) {
-                PlaybackDevices.Add(new NAudioDeviceInfo(device.Guid.ToString(), device.Description, false));
+            // For older Windows versions, use a simpler approach
+            PlaybackDevices.Add(new NAudioDeviceInfo("0", "Windows Speakers (Legacy)", true, true, "Available"));
+            CaptureDevices.Add(new NAudioDeviceInfo("0", "Windows Microphone (Legacy)", true, true, "Available"));
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+        }
+    }
+    
+    private void EnumerateCrossPlatformDevices() {
+        try {
+            // For non-Windows platforms (Linux, macOS)
+            PlaybackDevices.Add(new NAudioDeviceInfo("0", "System Audio Output", true, true, "Available"));
+            CaptureDevices.Add(new NAudioDeviceInfo("0", "System Audio Input", true, true, "Available"));
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+        }
+    }
+    
+    private void EnumeratePlaybackDevices() {
+        try {
+            // Try modern Windows Core Audio API first
+            if (TryEnumeratePlaybackDevicesModern()) {
+                return;
             }
             
-            // For input devices, we'll use a simple approach
+            // Fallback to traditional NAudio enumeration
+            EnumeratePlaybackDevicesFallback();
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+            PlaybackDevices.Add(new NAudioDeviceInfo("0", "Default Speakers (Fallback)", true, true, "Available"));
+        }
+    }
+    
+    private bool TryEnumeratePlaybackDevicesModern() {
+        try {
+            var deviceEnumerator = new MMDeviceEnumerator();
+            var playbackDevices = deviceEnumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
+            
+            bool hasDefault = false;
+            foreach (var device in playbackDevices) {
+                var isDefault = deviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Console)?.ID == device.ID;
+                var deviceName = device.FriendlyName ?? device.DeviceFriendlyName ?? "Unknown Speakers";
+                var status = device.State == DeviceState.Active ? "Available" : "Unavailable";
+                var isAvailable = device.State == DeviceState.Active;
+                
+                PlaybackDevices.Add(new NAudioDeviceInfo(device.ID, deviceName, isDefault, isAvailable, status));
+                if (isDefault) hasDefault = true;
+            }
+            
+            // Ensure we have a default device
+            if (!hasDefault && PlaybackDevices.Count > 0) {
+                PlaybackDevices[0].IsDefault = true;
+            }
+            
+            return PlaybackDevices.Count > 0;
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+            return false;
+        }
+    }
+    
+    private void EnumeratePlaybackDevicesFallback() {
+        try {
+            // Traditional NAudio enumeration with improved naming
+            foreach (var device in DirectSoundOut.Devices) {
+                var deviceName = device.Description;
+                
+                // Improve generic names
+                if (string.IsNullOrEmpty(deviceName)) {
+                    deviceName = "Audio Output Device";
+                }
+                
+                PlaybackDevices.Add(new NAudioDeviceInfo(device.Guid.ToString(), deviceName, false, true, "Available"));
+            }
+            
+            // Mark the first device as default
+            if (PlaybackDevices.Count > 0) {
+                PlaybackDevices[0].IsDefault = true;
+            }
+            
+            // If no devices found, add a default
+            if (PlaybackDevices.Count == 0) {
+                PlaybackDevices.Add(new NAudioDeviceInfo("0", "Default Speakers", true, true, "Available"));
+            }
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+            PlaybackDevices.Add(new NAudioDeviceInfo("0", "Default Speakers (Fallback)", true, true, "Available"));
+        }
+    }
+    
+    private void EnumerateCaptureDevices() {
+        try {
+            // Try modern Windows Core Audio API first
+            if (TryEnumerateCaptureDevicesModern()) {
+                return;
+            }
+            
+            // Fallback to traditional NAudio enumeration
+            EnumerateCaptureDevicesFallback();
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+            CaptureDevices.Add(new NAudioDeviceInfo("0", "Default Microphone (Fallback)", true, true, "Available"));
+        }
+    }
+    
+    private bool TryEnumerateCaptureDevicesModern() {
+        try {
+            var deviceEnumerator = new MMDeviceEnumerator();
+            var captureDevices = deviceEnumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
+            
+            bool hasDefault = false;
+            foreach (var device in captureDevices) {
+                var isDefault = deviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console)?.ID == device.ID;
+                var deviceName = device.FriendlyName ?? device.DeviceFriendlyName ?? "Unknown Microphone";
+                var status = device.State == DeviceState.Active ? "Available" : "Unavailable";
+                var isAvailable = device.State == DeviceState.Active;
+                
+                CaptureDevices.Add(new NAudioDeviceInfo(device.ID, deviceName, isDefault, isAvailable, status));
+                if (isDefault) hasDefault = true;
+            }
+            
+            // Ensure we have a default device
+            if (!hasDefault && CaptureDevices.Count > 0) {
+                CaptureDevices[0].IsDefault = true;
+            }
+            
+            return CaptureDevices.Count > 0;
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+            return false;
+        }
+    }
+    
+    private void EnumerateCaptureDevicesFallback() {
+        try {
+            // Traditional NAudio enumeration with improved naming
             for (int i = 0; i < WaveInEvent.DeviceCount; i++) {
                 var caps = WaveInEvent.GetCapabilities(i);
-                CaptureDevices.Add(new NAudioDeviceInfo(i.ToString(), caps.ProductName, i == 0));
+                var deviceName = caps.ProductName;
+                
+                // Improve generic names
+                if (string.IsNullOrEmpty(deviceName) || deviceName == "Primary Sound Driver") {
+                    deviceName = $"Microphone {i + 1}";
+                }
+                
+                CaptureDevices.Add(new NAudioDeviceInfo(i.ToString(), deviceName, i == 0, true, "Available"));
             }
             
+            // If no devices found, add a default
+            if (CaptureDevices.Count == 0) {
+                CaptureDevices.Add(new NAudioDeviceInfo("0", "Default Microphone", true, true, "Available"));
+            }
         }
         catch (Exception ex) {
             _ = ex; // Suppress warning
+            CaptureDevices.Add(new NAudioDeviceInfo("0", "Default Microphone (Fallback)", true, true, "Available"));
         }
     }
     
-    
-    public object InitializePlaybackDevice(NAudioDeviceInfo? deviceInfo, object format) {
+    public DirectSoundOut InitializePlaybackDevice(NAudioDeviceInfo? deviceInfo, AudioFormat format) {
         try {
-            // Just return a simple object - no actual audio initialization
-            return new { DeviceId = deviceInfo?.Id ?? "0", DeviceName = deviceInfo?.Name ?? "Default" };
+            // For now, just return a basic DirectSoundOut
+            // Device selection can be implemented later if needed
+            return new DirectSoundOut();
         }
         catch (Exception ex) {
             _ = ex; // Suppress warning
-            return new { DeviceId = "0", DeviceName = "Default" };
+            // Return default DirectSoundOut
+            return new DirectSoundOut();
+        }
+    }
+    
+    public WaveInEvent InitializeInputDevice(NAudioDeviceInfo? deviceInfo, AudioFormat format) {
+        try {
+            // Dispose current input device if exists
+            _currentInputDevice?.Dispose();
+            
+            if (deviceInfo == null) {
+                _currentInputDevice = new WaveInEvent();
+            } else {
+                // Try to parse device ID as integer for WaveInEvent
+                if (int.TryParse(deviceInfo.Id, out int deviceId)) {
+                    _currentInputDevice = new WaveInEvent {
+                        DeviceNumber = deviceId,
+                        WaveFormat = new WaveFormat(format.SampleRate, format.Channels)
+                    };
+                } else {
+                    // Fallback to default device
+                    _currentInputDevice = new WaveInEvent {
+                        WaveFormat = new WaveFormat(format.SampleRate, format.Channels)
+                    };
+                }
+            }
+            
+            return _currentInputDevice;
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+            // Return default WaveInEvent
+            _currentInputDevice = new WaveInEvent();
+            return _currentInputDevice;
         }
     }
     
     public void Dispose() {
-        // No resources to dispose since we're not initializing audio
+        try {
+            _currentInputDevice?.Dispose();
+            _currentInputDevice = null;
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+        }
     }
 }
 
-// Audio format constants to match SoundFlow
-public static class AudioFormat {
-    public static object Dvd => new { SampleRate = 48000, Channels = 2, BitsPerSample = 16 };
+public class AudioFormat {
+    public int SampleRate { get; set; }
+    public int Channels { get; set; }
+    public int BitsPerSample { get; set; }
+    
+    public static AudioFormat Dvd => new AudioFormat { SampleRate = 48000, Channels = 2, BitsPerSample = 16 };
 }
+

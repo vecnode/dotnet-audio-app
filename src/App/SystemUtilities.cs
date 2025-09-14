@@ -7,8 +7,7 @@ namespace App;
 
 public static class SystemUtilities
 {
-    public static string GetGpuAccelerationInfo()
-    {
+    public static string GetGpuAccelerationInfo() {
         try
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -367,3 +366,5 @@ public class PerformanceInfo
     public string GpuAcceleration { get; set; } = string.Empty;
     public string AudioBackend { get; set; } = string.Empty;
 }
+
+
