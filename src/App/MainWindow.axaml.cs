@@ -2,8 +2,10 @@
 
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using NAudio.Wave;
 
@@ -79,10 +81,23 @@ public partial class MainWindow : Window {
             
             // Populate device combo boxes
             PopulateDeviceComboBoxes();
+            
+            // Update permission status (non-blocking)
+            _ = UpdatePermissionStatusAsync();
         }
         catch (Exception ex) {
             _ = ex; // Suppress warning
-            // Error handling - could add UI feedback here if needed
+            
+            // Ensure we have basic functionality even if audio engine fails
+            try {
+                var statusText = this.FindControl<TextBlock>("PermissionStatusText");
+                if (statusText != null) {
+                    statusText.Text = "Audio engine initialization failed";
+                }
+            }
+            catch {
+                // Ignore UI update errors
+            }
         }
     }
     
@@ -147,6 +162,11 @@ public partial class MainWindow : Window {
             UpdateTextBlock("MemoryText", $"App Memory: {perfInfo.MemoryUsageMB} MB");
             UpdateTextBlock("GpuAccelerationText", $"GPU Acceleration: {perfInfo.GpuAcceleration}");
             UpdateTextBlock("AudioBackendText", $"Audio Backend: {audioBackend}");
+            
+            // Update audio format information
+            if (_audioEngine != null) {
+                UpdateTextBlock("AudioFormatText", $"Audio Format: {_audioEngine.GetCurrentAudioFormatInfo()}");
+            }
         }
         catch (Exception ex) {
             _ = ex; // Suppress warning
@@ -206,6 +226,9 @@ public partial class MainWindow : Window {
                 // Initialize new device
                 var format = AudioFormat.Dvd;
                 _playbackDevice = _audioEngine.InitializePlaybackDevice(selectedItem.Device, format);
+                
+                // Update audio format display
+                UpdateTextBlock("AudioFormatText", $"Audio Format: {_audioEngine.GetCurrentAudioFormatInfo()}");
             }
         }
         catch (Exception ex) {
@@ -225,6 +248,70 @@ public partial class MainWindow : Window {
                 // Initialize new input device
                 var format = AudioFormat.Dvd;
                 _inputDevice = _audioEngine.InitializeInputDevice(selectedItem.Device, format);
+                
+                // Update audio format display
+                UpdateTextBlock("AudioFormatText", $"Audio Format: {_audioEngine.GetCurrentAudioFormatInfo()}");
+            }
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+        }
+    }
+
+    private async void OnRequestPermissionsClick(object? sender, RoutedEventArgs e) {
+        try {
+            if (_audioEngine == null) return;
+
+            var button = sender as Button;
+            if (button != null) {
+                button.Content = "Requesting...";
+                button.IsEnabled = false;
+            }
+
+            // Request permissions
+            var hasPermissions = await _audioEngine.RequestAudioPermissionsAsync();
+            
+            // Update UI
+            await UpdatePermissionStatusAsync();
+            
+            if (button != null) {
+                button.Content = "Request Audio Permissions";
+                button.IsEnabled = true;
+            }
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+            
+            var button = sender as Button;
+            if (button != null) {
+                button.Content = "Request Audio Permissions";
+                button.IsEnabled = true;
+            }
+        }
+    }
+
+    private void UpdatePermissionStatus() {
+        try {
+            if (_audioEngine == null) return;
+
+            var statusText = this.FindControl<TextBlock>("PermissionStatusText");
+            if (statusText != null) {
+                statusText.Text = _audioEngine.GetPermissionStatus();
+            }
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+        }
+    }
+    
+    private async Task UpdatePermissionStatusAsync() {
+        try {
+            if (_audioEngine == null) return;
+
+            var statusText = this.FindControl<TextBlock>("PermissionStatusText");
+            if (statusText != null) {
+                var status = await _audioEngine.GetPermissionStatusAsync();
+                statusText.Text = status;
             }
         }
         catch (Exception ex) {

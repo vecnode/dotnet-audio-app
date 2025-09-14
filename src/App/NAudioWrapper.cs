@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using NAudio.Wave;
 using NAudio.CoreAudioApi;
+using System.Threading.Tasks;
 
 namespace App;
 
@@ -32,6 +33,8 @@ public class NAudioEngine : IDisposable {
     public List<NAudioDeviceInfo> PlaybackDevices { get; private set; } = new();
     public List<NAudioDeviceInfo> CaptureDevices { get; private set; } = new();
     private WaveInEvent? _currentInputDevice;
+    private DirectSoundOut? _currentPlaybackDevice;
+    private AudioFormat? _currentFormat;
     
     public NAudioEngine() {
         UpdateDevicesInfo();
@@ -256,14 +259,17 @@ public class NAudioEngine : IDisposable {
     
     public DirectSoundOut InitializePlaybackDevice(NAudioDeviceInfo? deviceInfo, AudioFormat format) {
         try {
-            // For now, just return a basic DirectSoundOut
-            // Device selection can be implemented later if needed
-            return new DirectSoundOut();
+            // Store current format and device
+            _currentFormat = format;
+            _currentPlaybackDevice = new DirectSoundOut();
+            return _currentPlaybackDevice;
         }
         catch (Exception ex) {
             _ = ex; // Suppress warning
             // Return default DirectSoundOut
-            return new DirectSoundOut();
+            _currentPlaybackDevice = new DirectSoundOut();
+            _currentFormat = format;
+            return _currentPlaybackDevice;
         }
     }
     
@@ -299,10 +305,114 @@ public class NAudioEngine : IDisposable {
         }
     }
     
+    public async Task<bool> RequestAudioPermissionsAsync() {
+        try {
+            // Test if we can access audio devices
+            var canAccessPlayback = await TestPlaybackAccessAsync();
+            var canAccessCapture = await TestCaptureAccessAsync();
+            
+            return canAccessPlayback && canAccessCapture;
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+            return false;
+        }
+    }
+    
+    private async Task<bool> TestPlaybackAccessAsync() {
+        try {
+            return await Task.Run(() => {
+                try {
+                    using var testDevice = new DirectSoundOut();
+                    return true;
+                }
+                catch {
+                    return false;
+                }
+            });
+        }
+        catch {
+            return false;
+        }
+    }
+    
+    private async Task<bool> TestCaptureAccessAsync() {
+        try {
+            return await Task.Run(() => {
+                try {
+                    using var testDevice = new WaveInEvent();
+                    return true;
+                }
+                catch {
+                    return false;
+                }
+            });
+        }
+        catch {
+            return false;
+        }
+    }
+    
+    public string GetPermissionStatus() {
+        try {
+            // Return a simple status without blocking calls
+            return "(Checking permissions)";
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+            return "(Permission status unknown)";
+        }
+    }
+    
+    public async Task<string> GetPermissionStatusAsync() {
+        try {
+            var playbackAccess = await TestPlaybackAccessAsync();
+            var captureAccess = await TestCaptureAccessAsync();
+            
+            if (playbackAccess && captureAccess) {
+                return "(Audio permissions granted)";
+            }
+            else if (playbackAccess) {
+                return "(Playback only - Microphone access needed)";
+            }
+            else if (captureAccess) {
+                return "(Recording only - Speaker access needed)";
+            }
+            else {
+                return "(Audio permissions denied)";
+            }
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+            return "(Permission status unknown)";
+        }
+    }
+    
+    public string GetCurrentAudioFormatInfo() {
+        try {
+            if (_currentFormat == null) {
+                return "No audio format set";
+            }
+            
+            var channels = _currentFormat.Channels == 1 ? "Mono" : _currentFormat.Channels == 2 ? "Stereo" : $"{_currentFormat.Channels} channels";
+            return $"{_currentFormat.SampleRate} Hz, {_currentFormat.BitsPerSample}-bit, {channels}";
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+            return "Audio format unknown";
+        }
+    }
+    
+    public AudioFormat? GetCurrentFormat() {
+        return _currentFormat;
+    }
+    
     public void Dispose() {
         try {
             _currentInputDevice?.Dispose();
+            _currentPlaybackDevice?.Dispose();
             _currentInputDevice = null;
+            _currentPlaybackDevice = null;
         }
         catch (Exception ex) {
             _ = ex; // Suppress warning
