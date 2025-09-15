@@ -266,27 +266,6 @@ public static class SystemUtilities
     }
     
     
-    public static string GetAudioBackendInfo()
-    {
-        try
-        {
-            // Check for platform-specific audio backends
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                return "Windows Audio (WASAPI)";
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
-                return "ALSA/PulseAudio";
-            }
-            
-            return "Unknown";
-        }
-        catch
-        {
-            return "Error detecting audio backend";
-        }
-    }
     
 
     
@@ -324,7 +303,7 @@ public static class SystemUtilities
             {
                 MemoryUsageMB = currentProcess.WorkingSet64 / (1024 * 1024),
                 GpuAcceleration = GetGpuAccelerationInfo(),
-                AudioBackend = GetAudioBackendInfo()
+                AudioBackend = "NAudio (Windows)"
             };
         }
         catch (Exception ex)

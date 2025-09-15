@@ -3,16 +3,16 @@ using System;
 
 namespace App;
 
+// Application entry point and Avalonia framework configuration.
+// Configures cross-platform UI framework with professional theming and logging.
 class Program
 {
-    // Initialization code. Don't use any Avalonia, third-party APIs or any
-    // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
-    // yet and stuff might break.
+    // Main application entry point. Initializes Avalonia framework and starts desktop application.
     [STAThread]
     public static void Main(string[] args) => BuildAvaloniaApp()
         .StartWithClassicDesktopLifetime(args);
 
-    // Avalonia configuration, don't remove; also used by visual designer.
+    // Configures Avalonia application with cross-platform support and professional theming.
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()

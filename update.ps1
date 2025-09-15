@@ -4,7 +4,7 @@
 Write-Host "=== .NET Audio Control - Environment Setup ===" -ForegroundColor Green
 
 # Check if .NET is installed
-Write-Host "Checking .NET installation..." -ForegroundColor Yellow
+Write-Host "Checking .NET installation" -ForegroundColor Yellow
 try {
     $dotnetVersion = dotnet --version
     Write-Host ".NET SDK found: $dotnetVersion" -ForegroundColor Green
@@ -68,7 +68,7 @@ if ($missingPackages.Count -gt 0) {
     Write-Host "`nInstalling missing packages" -ForegroundColor Yellow
     foreach ($package in $missingPackages) {
         try {
-            Write-Host "Installing $package..." -ForegroundColor Yellow
+            Write-Host "Installing $package" -ForegroundColor Yellow
             dotnet add src/App/App.csproj package $package
             Write-Host "$package installed" -ForegroundColor Green
         } catch {

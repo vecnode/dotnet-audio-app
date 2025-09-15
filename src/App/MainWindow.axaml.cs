@@ -1,57 +1,42 @@
-// functions
-
 using System;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
-using NAudio.Wave;
+using Avalonia.Platform.Storage;
 
+using App.Audio;
+using NAudio.Wave;
 
 namespace App;
 
-// Wrapper class to display device names properly in ComboBox
-public class DeviceDisplayItem {
-    public NAudioDeviceInfo Device { get; set; }
-    public string DisplayName { get; set; }
-    
-    public DeviceDisplayItem(NAudioDeviceInfo device) {
-        Device = device;
-        DisplayName = device.GetDisplayName();
-    }
-    
-    public override string ToString() {
-        return DisplayName;
-    }
-}
-
+// Main application window providing audio recording and system monitoring capabilities.
+// Features include microphone input selection, real-time audio level monitoring,
+// WAV file recording, and comprehensive system information display.
 public partial class MainWindow : Window {
     private DispatcherTimer? _performanceTimer;
-    private NAudioEngine? _audioEngine;
-    private DirectSoundOut? _playbackDevice;
-    private WaveInEvent? _inputDevice;
+    private AudioInputService? _audioService;
+    private int _selectedDeviceIndex = 0;
     
+    // Debug logging configuration
+    private bool _debugEnabled = true;
+    private int _debugLineCount = 0;
+    private const int MAX_DEBUG_LINES = 100;
 
-    // Constructor
     public MainWindow() {                
-        InitializeComponent(); // Avalonia Setup
-        
-        UpdatePlatformInfo(); // Text blocks specs from the machine
-
-        StartAudioEngine(); // Audio engine
-        
+        InitializeComponent();
+        UpdatePlatformInfo();
+        StartAudioService();
+        PopulateInputDevices();
         InitializePerformanceMonitoring();
-        
     }
     
     protected override void OnClosed(EventArgs e) {
         try {
-            _playbackDevice?.Dispose();
-            _inputDevice?.Dispose();
-            _audioEngine?.Dispose();
-            
+            _audioService?.Dispose();
         }
         catch (Exception ex)
         {
@@ -65,46 +50,120 @@ public partial class MainWindow : Window {
     
     
 
-    private void StartAudioEngine() {
+    private void StartAudioService() {
         try {
-            _audioEngine = new NAudioEngine();
-
-            // Update device information to get all available devices
-            _audioEngine.UpdateDevicesInfo();
-
-            var format = AudioFormat.Dvd; // 48kHz, 16-bit Stereo
-            var defaultPlaybackDevice = _audioEngine.PlaybackDevices.FirstOrDefault(x => x.IsDefault);
-            var defaultInputDevice = _audioEngine.CaptureDevices.FirstOrDefault(x => x.IsDefault);
+            LogDebug("Initializing NAudio audio service", "INIT");
+            _audioService = new AudioInputService(sampleRate: 48000);
             
-            _playbackDevice = _audioEngine.InitializePlaybackDevice(defaultPlaybackDevice, format);
-            _inputDevice = _audioEngine.InitializeInputDevice(defaultInputDevice, format);
+            LogDebug("NAudio audio service initialized successfully", "INIT");
             
-            // Populate device combo boxes
-            PopulateDeviceComboBoxes();
-            
-            // Update permission status (non-blocking)
-            _ = UpdatePermissionStatusAsync();
+            // Set up audio sample monitoring
+            _audioService.OnSamples += OnAudioSamples;
         }
         catch (Exception ex) {
-            _ = ex; // Suppress warning
+            LogDebug($"Failed to initialize audio service: {ex.Message}", "ERROR");
             
-            // Ensure we have basic functionality even if audio engine fails
-            try {
-                var statusText = this.FindControl<TextBlock>("PermissionStatusText");
-                if (statusText != null) {
-                    statusText.Text = "Audio engine initialization failed";
-                }
-            }
-            catch {
-                // Ignore UI update errors
-            }
         }
     }
     
-   
-
-
-
+    
+    private void OnMicrophoneButtonClick(object? sender, RoutedEventArgs e) {
+        try {
+            if (_audioService == null) {
+                LogDebug("Microphone button clicked but audio service not initialized", "ERROR");
+                return;
+            }
+            
+            if (_audioService.IsRecording) {
+                // Stop recording
+                LogDebug("Stopping microphone recording", "AUDIO");
+                _audioService.Stop();
+                LogDebug("Microphone recording stopped successfully", "AUDIO");
+                UpdateButtonContent("MicrophoneButton", "Start Microphone");
+                
+                // Enable save button if we have recorded audio
+                UpdateSaveButtonState();
+            } else {
+                // Start recording
+                LogDebug($"Starting microphone recording with device {_selectedDeviceIndex}", "AUDIO");
+                _audioService.Start(_selectedDeviceIndex);
+                LogDebug("Microphone recording started successfully", "AUDIO");
+                UpdateButtonContent("MicrophoneButton", "Stop Microphone");
+                
+                // Disable save button while recording
+                UpdateSaveButtonState();
+            }
+        }
+        catch (Exception ex) {
+            LogDebug($"Microphone button error: {ex.Message}", "ERROR");
+        }
+    }
+    
+    private void OnAudioSamples(short[] samples) {
+        try {
+            // Calculate audio level from samples
+            var audioLevel = CalculateAudioLevel(samples);
+            
+            // Create a simple dB-like display
+            var displayLevel = audioLevel > 0.1 ? 20.0 * Math.Log10(audioLevel / 100.0) : -60.0;
+            
+            // Log audio level changes (but throttle to avoid spam)
+            if (_debugLineCount % 5 == 0) { // Log every 5th update
+                LogDebug($"Audio Level: {audioLevel:F1}% ({displayLevel:F1} dB)", "AUDIO");
+            }
+            _debugLineCount++;
+            
+            // Update UI on the main thread
+            Dispatcher.UIThread.Post(() => {
+                UpdateAudioLevelText(displayLevel, audioLevel);
+            });
+        }
+        catch (Exception ex) {
+            LogDebug($"Audio samples processing error: {ex.Message}", "ERROR");
+        }
+    }
+    
+    private float CalculateAudioLevel(short[] samples) {
+        if (samples.Length == 0) return 0.0f;
+        
+        float sum = 0.0f;
+        for (int i = 0; i < samples.Length; i++) {
+            // Convert 16-bit signed integer to normalized float (-1.0 to +1.0)
+            float sample = samples[i] / 32768.0f;
+            sum += sample * sample;
+        }
+        
+        var rms = (float)Math.Sqrt(sum / samples.Length);
+        return rms * 100; // Convert to percentage (0-100)
+    }
+    
+    private void UpdateAudioLevelText(double dbLevel, double percentage) {
+        try {
+            var audioLevelText = this.FindControl<TextBlock>("AudioLevelText");
+            if (audioLevelText != null) {
+                // Show both percentage and dB for better understanding
+                audioLevelText.Text = $"{percentage:F1}% ({dbLevel:F1} dB)";
+                
+                // Change color based on level
+                if (percentage > 50) {
+                    audioLevelText.Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(255, 0, 0)); // Red
+                } else if (percentage > 10) {
+                    audioLevelText.Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(255, 165, 0)); // Orange
+                } else if (percentage > 1) {
+                    audioLevelText.Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(144, 238, 144)); // Light Green
+                } else {
+                    audioLevelText.Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(100, 100, 100)); // Gray (silence)
+                }
+            }
+            
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+        }
+    }
+    
+    
+    
 
     private void UpdatePlatformInfo() {
         try {
@@ -158,14 +217,14 @@ public partial class MainWindow : Window {
     private void UpdatePerformanceInfo() {
         try {
             var perfInfo = SystemUtilities.GetCurrentPerformanceInfo();            
-            var audioBackend = perfInfo.AudioBackend;
             UpdateTextBlock("MemoryText", $"App Memory: {perfInfo.MemoryUsageMB} MB");
             UpdateTextBlock("GpuAccelerationText", $"GPU Acceleration: {perfInfo.GpuAcceleration}");
-            UpdateTextBlock("AudioBackendText", $"Audio Backend: {audioBackend}");
+            UpdateTextBlock("AudioBackendText", $"Audio Backend: NAudio (Windows)");
             
             // Update audio format information
-            if (_audioEngine != null) {
-                UpdateTextBlock("AudioFormatText", $"Audio Format: {_audioEngine.GetCurrentAudioFormatInfo()}");
+            if (_audioService != null) {
+                var channelType = _audioService.Channels == 1 ? "Mono" : _audioService.Channels == 2 ? "Stereo" : $"{_audioService.Channels}-channel";
+                UpdateTextBlock("AudioFormatText", $"Audio Format: {_audioService.SampleRate}Hz, {channelType}, 16-bit (NAudio)");
             }
         }
         catch (Exception ex) {
@@ -186,117 +245,12 @@ public partial class MainWindow : Window {
             _ = ex; // Suppress warning
         }
     }
-
-    private void PopulateDeviceComboBoxes() {
+    
+    private void UpdateButtonContent(string name, string content) {
         try {
-            if (_audioEngine == null) return;
-
-            // Populate output devices combo box
-            var outputComboBox = this.FindControl<ComboBox>("OutputDeviceComboBox");
-            if (outputComboBox != null) {
-                var playbackDevices = _audioEngine.PlaybackDevices.Select(d => new DeviceDisplayItem(d)).ToList();
-                outputComboBox.ItemsSource = playbackDevices;
-                outputComboBox.SelectedItem = playbackDevices.FirstOrDefault(x => x.Device.IsDefault);                
-            }
-
-            // Populate input devices combo box
-            var inputComboBox = this.FindControl<ComboBox>("InputDeviceComboBox");
-            if (inputComboBox != null) {
-                var captureDevices = _audioEngine.CaptureDevices.Select(d => new DeviceDisplayItem(d)).ToList();
-                inputComboBox.ItemsSource = captureDevices;
-                inputComboBox.SelectedItem = captureDevices.FirstOrDefault(x => x.Device.IsDefault);
-                
-            }
-
-        }
-        catch (Exception ex) {
-            _ = ex; // Suppress warning
-        }
-    }
-
-    private void OnOutputDeviceSelectionChanged(object? sender, SelectionChangedEventArgs e) {
-        try {
-            if (_audioEngine == null || _playbackDevice == null) return;
-
-            var comboBox = sender as ComboBox;
-            if (comboBox?.SelectedItem is DeviceDisplayItem selectedItem) {
-                // Dispose current device
-                _playbackDevice?.Dispose();
-
-                // Initialize new device
-                var format = AudioFormat.Dvd;
-                _playbackDevice = _audioEngine.InitializePlaybackDevice(selectedItem.Device, format);
-                
-                // Update audio format display
-                UpdateTextBlock("AudioFormatText", $"Audio Format: {_audioEngine.GetCurrentAudioFormatInfo()}");
-            }
-        }
-        catch (Exception ex) {
-            _ = ex; // Suppress warning
-        }
-    }
-
-    private void OnInputDeviceSelectionChanged(object? sender, SelectionChangedEventArgs e) {
-        try {
-            if (_audioEngine == null) return;
-
-            var comboBox = sender as ComboBox;
-            if (comboBox?.SelectedItem is DeviceDisplayItem selectedItem) {
-                // Dispose current input device
-                _inputDevice?.Dispose();
-
-                // Initialize new input device
-                var format = AudioFormat.Dvd;
-                _inputDevice = _audioEngine.InitializeInputDevice(selectedItem.Device, format);
-                
-                // Update audio format display
-                UpdateTextBlock("AudioFormatText", $"Audio Format: {_audioEngine.GetCurrentAudioFormatInfo()}");
-            }
-        }
-        catch (Exception ex) {
-            _ = ex; // Suppress warning
-        }
-    }
-
-    private async void OnRequestPermissionsClick(object? sender, RoutedEventArgs e) {
-        try {
-            if (_audioEngine == null) return;
-
-            var button = sender as Button;
+            var button = this.FindControl<Button>(name);
             if (button != null) {
-                button.Content = "Requesting...";
-                button.IsEnabled = false;
-            }
-
-            // Request permissions
-            var hasPermissions = await _audioEngine.RequestAudioPermissionsAsync();
-            
-            // Update UI
-            await UpdatePermissionStatusAsync();
-            
-            if (button != null) {
-                button.Content = "Request Audio Permissions";
-                button.IsEnabled = true;
-            }
-        }
-        catch (Exception ex) {
-            _ = ex; // Suppress warning
-            
-            var button = sender as Button;
-            if (button != null) {
-                button.Content = "Request Audio Permissions";
-                button.IsEnabled = true;
-            }
-        }
-    }
-
-    private void UpdatePermissionStatus() {
-        try {
-            if (_audioEngine == null) return;
-
-            var statusText = this.FindControl<TextBlock>("PermissionStatusText");
-            if (statusText != null) {
-                statusText.Text = _audioEngine.GetPermissionStatus();
+                button.Content = content;
             }
         }
         catch (Exception ex) {
@@ -304,19 +258,216 @@ public partial class MainWindow : Window {
         }
     }
     
-    private async Task UpdatePermissionStatusAsync() {
+    private void UpdateSaveButtonState() {
         try {
-            if (_audioEngine == null) return;
-
-            var statusText = this.FindControl<TextBlock>("PermissionStatusText");
-            if (statusText != null) {
-                var status = await _audioEngine.GetPermissionStatusAsync();
-                statusText.Text = status;
+            var saveButton = this.FindControl<Button>("SaveButton");
+            if (saveButton != null && _audioService != null) {
+                saveButton.IsEnabled = !_audioService.IsRecording && _audioService.HasRecordedAudio;
             }
         }
         catch (Exception ex) {
             _ = ex; // Suppress warning
         }
     }
+    
+    private void PopulateInputDevices() {
+        try {
+            var deviceComboBox = this.FindControl<ComboBox>("InputDeviceComboBox");
+            if (deviceComboBox != null) {
+                var devices = AudioInputService.GetAvailableInputDevices();
+                deviceComboBox.ItemsSource = devices;
+                
+                if (devices.Length > 0) {
+                    deviceComboBox.SelectedIndex = 0;
+                    _selectedDeviceIndex = 0;
+                    LogDebug($"Available input devices: {string.Join(", ", devices)}", "INIT");
+                } else {
+                    LogDebug("No input devices found", "ERROR");
+                }
+            }
+        }
+        catch (Exception ex) {
+            LogDebug($"Error populating input devices: {ex.Message}", "ERROR");
+        }
+    }
+    
+    private void OnInputDeviceSelectionChanged(object? sender, SelectionChangedEventArgs e) {
+        try {
+            var deviceComboBox = sender as ComboBox;
+            if (deviceComboBox?.SelectedIndex >= 0) {
+                _selectedDeviceIndex = deviceComboBox.SelectedIndex;
+                LogDebug($"Selected input device: {deviceComboBox.SelectedItem}", "AUDIO");
+                
+                // If currently recording, restart with new device
+                if (_audioService?.IsRecording == true) {
+                    LogDebug("Restarting recording with new device", "AUDIO");
+                    _audioService.Stop();
+                    _audioService.Start(_selectedDeviceIndex);
+                }
+            }
+        }
+        catch (Exception ex) {
+            LogDebug($"Device selection error: {ex.Message}", "ERROR");
+        }
+    }
+    
+    private async void OnSaveButtonClick(object? sender, RoutedEventArgs e) {
+        try {
+            if (_audioService == null || !_audioService.HasRecordedAudio) {
+                LogDebug("No recorded audio to save", "ERROR");
+                return;
+            }
+            
+            LogDebug("Opening save dialog for audio file", "AUDIO");
+            
+            // Get the top level for the file dialog
+            var topLevel = TopLevel.GetTopLevel(this);
+            if (topLevel?.StorageProvider == null) {
+                LogDebug("Storage provider not available", "ERROR");
+                return;
+            }
+            
+            // Configure file picker options
+            var filePickerOptions = new FilePickerSaveOptions
+            {
+                Title = "Save Audio Recording",
+                DefaultExtension = "wav",
+                SuggestedFileName = $"recording_{DateTime.Now:yyyyMMdd_HHmmss}.wav",
+                FileTypeChoices = new[]
+                {
+                    new FilePickerFileType("WAV Audio Files")
+                    {
+                        Patterns = new[] { "*.wav" }
+                    }
+                }
+            };
+            
+            // Show save dialog
+            var file = await topLevel.StorageProvider.SaveFilePickerAsync(filePickerOptions);
+            if (file == null) {
+                LogDebug("Save dialog cancelled by user", "AUDIO");
+                return;
+            }
+            
+            LogDebug($"Saving audio to: {file.Name}", "AUDIO");
+            
+            // Get recorded audio data
+            var audioData = _audioService.GetRecordedAudio();
+            if (audioData.Length == 0) {
+                LogDebug("No audio data to save", "ERROR");
+                return;
+            }
+            
+            // Save as WAV file using NAudio
+            await SaveAudioToWavFile(file, audioData);
+            
+            LogDebug($"Audio saved successfully: {file.Name}", "AUDIO");
+            
+            // Clear the recorded audio after saving
+            _audioService.ClearRecordedAudio();
+            UpdateSaveButtonState();
+            
+        }
+        catch (Exception ex) {
+            LogDebug($"Save audio error: {ex.Message}", "ERROR");
+        }
+    }
+    
+    private async Task SaveAudioToWavFile(IStorageFile file, short[] audioData) {
+        try {
+            // Open file stream
+            await using var stream = await file.OpenWriteAsync();
+            
+            // Create WAV file writer
+            var waveFormat = new WaveFormat(_audioService!.SampleRate, 16, _audioService.Channels);
+            using var writer = new WaveFileWriter(stream, waveFormat);
+            
+            // Write audio data
+            writer.WriteSamples(audioData, 0, audioData.Length);
+            
+            LogDebug($"WAV file created: {audioData.Length} samples, {waveFormat.SampleRate}Hz, {waveFormat.Channels} channels", "AUDIO");
+        }
+        catch (Exception ex) {
+            LogDebug($"Error writing WAV file: {ex.Message}", "ERROR");
+            throw;
+        }
+    }
+
+
+    
+    // Debug logging methods
+    private void LogDebug(string message, string level = "INFO") {
+        if (!_debugEnabled) return;
+        
+        try {
+            Dispatcher.UIThread.Post(() => {
+                var debugTextBlock = this.FindControl<TextBlock>("DebugTextBlock");
+                var debugScrollViewer = this.FindControl<ScrollViewer>("DebugScrollViewer");
+                
+                if (debugTextBlock != null && debugScrollViewer != null) {
+                    var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
+                    var logEntry = $"[{timestamp}] [{level}] {message}";
+                    
+                    // Add new line if not the first entry
+                    var currentText = debugTextBlock.Text;
+                    if (!string.IsNullOrEmpty(currentText) && !currentText.EndsWith(Environment.NewLine)) {
+                        currentText += Environment.NewLine;
+                    }
+                    
+                    currentText += logEntry;
+                    
+                    // Limit number of lines to prevent memory issues
+                    var lines = currentText.Split(new[] { Environment.NewLine }, StringSplitOptions.None);
+                    if (lines.Length > MAX_DEBUG_LINES) {
+                        currentText = string.Join(Environment.NewLine, lines.Skip(lines.Length - MAX_DEBUG_LINES));
+                    }
+                    
+                    debugTextBlock.Text = currentText;
+                    
+                    // Auto-scroll to bottom
+                    debugScrollViewer.ScrollToEnd();
+                }
+            });
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+        }
+    }
+    
+    private void OnClearDebugClick(object? sender, RoutedEventArgs e) {
+        try {
+            var debugTextBlock = this.FindControl<TextBlock>("DebugTextBlock");
+            if (debugTextBlock != null) {
+                debugTextBlock.Text = "[DEBUG] Debug console cleared";
+                LogDebug("Debug console cleared by user", "CLEAR");
+            }
+        }
+        catch (Exception ex) {
+            _ = ex; // Suppress warning
+        }
+    }
+    
+    private async void OnCopyDebugClick(object? sender, RoutedEventArgs e) {
+        try {
+            var debugTextBlock = this.FindControl<TextBlock>("DebugTextBlock");
+            if (debugTextBlock != null) {
+                var debugText = debugTextBlock.Text;
+                
+                // Copy to clipboard using TopLevel
+                var topLevel = TopLevel.GetTopLevel(this);
+                if (topLevel?.Clipboard != null) {
+                    await topLevel.Clipboard.SetTextAsync(debugText);
+                    LogDebug("Debug output copied to clipboard", "SYSTEM");
+                } else {
+                    LogDebug("Failed to copy debug output - clipboard not available", "ERROR");
+                }
+            }
+        }
+        catch (Exception ex) {
+            LogDebug($"Copy debug error: {ex.Message}", "ERROR");
+        }
+    }
+    
+
 }
 

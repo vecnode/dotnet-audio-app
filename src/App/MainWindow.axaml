@@ -19,44 +19,86 @@
             
             <Separator Margin="0,20,0,20" Background="#555"/>
 
-            <!-- Audio Permissions Section -->  
-            
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                <Button Name="RequestPermissionsButton"
-                        Content="Request Audio Permissions"
-                        Foreground="White"
-                        Margin="0,0,10,0"
-                        Click="OnRequestPermissionsClick"/>
-                
-                <TextBlock Name="PermissionStatusText"
-                           Text="Checking permissions"
-                           Foreground="White"
-                           VerticalAlignment="Center"/>
-            </StackPanel>
-            
-            <!-- Device Selection -->
-            <TextBlock Text="Output Device:" 
-                       FontSize="12" 
-                       Foreground="White" 
-                       Margin="0,5,0,2"/>
-                       
-            <ComboBox Name="OutputDeviceComboBox"
-                      Background="#3C3C3C"
-                      Foreground="White"
-                      Margin="0,0,0,10"
-                      SelectionChanged="OnOutputDeviceSelectionChanged"/>
-            
+            <!-- Audio Control Section -->
             <TextBlock Text="Input Device:" 
                        FontSize="12" 
                        Foreground="White" 
-                       Margin="0,5,0,2"/>
-                       
+                       Margin="0,0,0,5"/>
+            
             <ComboBox Name="InputDeviceComboBox"
-                      Background="#3C3C3C"
                       Foreground="White"
+                      Background="#444444"
                       Margin="0,0,0,10"
                       SelectionChanged="OnInputDeviceSelectionChanged"/>
             
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Name="MicrophoneButton"
+                        Content="Start Microphone"
+                        Foreground="White"
+                        Click="OnMicrophoneButtonClick"/>
+                
+                <Button Name="SaveButton"
+                        Content="Save Audio"
+                        Foreground="White"
+                        Background="#666666"
+                        IsEnabled="False"
+                        Click="OnSaveButtonClick"/>
+            </StackPanel>
+            
+            <TextBlock Text="Audio Level:" 
+                       FontSize="12" 
+                       Foreground="White" 
+                       Margin="0,10,0,5"/>
+            
+            <TextBlock Name="AudioLevelText"
+                       Text="0.0% (-60.0 dB)"
+                       FontSize="14"
+                       Foreground="#909090"
+                       Margin="0,0,0,5"/>
+
+            <Separator Margin="0,20,0,20" Background="#555"/>
+
+            <!-- Debug Logger Section -->
+            <TextBlock Text="Debug Console" 
+                       FontSize="14" 
+                       Foreground="White" 
+                       Margin="0,0,0,10"/>
+            
+            <Border Background="#1E1E1E" 
+                    BorderBrush="#555555" 
+                    BorderThickness="1" 
+                    CornerRadius="5" 
+                    Height="200" 
+                    Margin="0,0,0,10">
+                <ScrollViewer Name="DebugScrollViewer" 
+                              VerticalScrollBarVisibility="Auto" 
+                              HorizontalScrollBarVisibility="Auto"
+                              Padding="10">
+                    <TextBlock Name="DebugTextBlock" 
+                               Text="[DEBUG] Application started - Ready for audio processing" 
+                               Foreground="#90EE90" 
+                               FontFamily="Consolas, Courier New, monospace" 
+                               FontSize="11" 
+                               TextWrapping="Wrap"/>
+                </ScrollViewer>
+            </Border>
+            
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                <Button Name="ClearDebugButton"
+                        Content="Clear Debug"
+                        Foreground="White"
+                        Background="#666666"
+                        Margin="0,0,10,0"
+                        Click="OnClearDebugClick"/>
+                
+                <Button Name="CopyDebugButton"
+                        Content="Copy Debug"
+                        Foreground="White"
+                        Background="#666666"
+                        Click="OnCopyDebugClick"/>
+            </StackPanel>
+                
+
             <Separator Margin="0,20,0,20" Background="#555"/>
 
             <!-- System Information -->
