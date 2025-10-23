@@ -74,7 +74,7 @@ dotnet publish src/App/App.csproj -c Release -r osx-arm64  --self-contained true
 - (future) For best cross-platform behavior, the script should start with CPU ONNX Runtime. 
 - On Windows, we will enable GPU via DirectML in the future (no CUDA install needed):
 - `start.ps1` should be enough for Windows development.
-- `update.ps1` is to setup the repository folder on Windows.
+- `update.ps1` updates the repository folder on Windows.
 
 ### Next steps
 
